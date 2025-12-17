@@ -1,0 +1,17 @@
+# Session files
+*.session
+*.session-journal
+sessions/*.json
+sessions/*.session
+sessions_unauthorized/*.json
+sessions_unauthorized/*.session
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# Environment
+.env
