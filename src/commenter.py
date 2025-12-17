@@ -28,11 +28,15 @@ from .utils import log_error, log_info, log_comment, move_account_to_status_fold
 
 
 class CommentResult:
-    def __init__(self, phone: str, success: bool, error: Optional[str] = None, comment: Optional[str] = None):
+    def __init__(self, phone: str, success: bool, error: Optional[str] = None, comment: Optional[str] = None,
+                 should_move: bool = False, session_file: Path = None, json_file: Path = None):
         self.phone = phone
         self.success = success
         self.error = error
         self.comment = comment
+        self.should_move = should_move
+        self.session_file = session_file
+        self.json_file = json_file
 
 
 class Commenter:
@@ -291,23 +295,11 @@ class Commenter:
                     await self.db.set_account_active(account["id"], False)
                     if self.console:
                         self.console.print(f"  [red]x {phone}: {error_msg[:40]}[/red]")
-
-                    if self.sessions_dir:
-                        status = "BANNED" if "banned" in error_lower else "SPAM" if "spam" in error_lower else "RESTRICTED"
-                        moved = move_account_to_status_folder(
-                            session_file, json_file, status,
-                            self.sessions_dir, None
-                        )
-                        if moved:
-                            folder = get_status_folder(status)
-                            self.moved_accounts.append((phone, folder))
-                            if self.console:
-                                self.console.print(f"    [dim]-> moved to sessions_{folder}/[/dim]")
                 else:
                     if self.console:
                         self.console.print(f"  [yellow]! {phone}: {error_msg[:40]}[/yellow]")
 
-                return CommentResult(phone, False, error_msg[:50], comment_text)
+                return CommentResult(phone, False, error_msg[:50], comment_text, is_ban, session_file, json_file)
 
             finally:
                 await client.disconnect()
@@ -462,6 +454,20 @@ class Commenter:
                 *[process_with_progress(acc) for acc in valid_accounts],
                 return_exceptions=True
             )
+
+        for result in self.results:
+            if result.should_move and result.session_file and self.sessions_dir:
+                error_lower = (result.error or "").lower()
+                status = "BANNED" if "banned" in error_lower else "SPAM" if "spam" in error_lower else "RESTRICTED"
+                moved = move_account_to_status_folder(
+                    result.session_file, result.json_file, status,
+                    self.sessions_dir, None
+                )
+                if moved:
+                    folder = get_status_folder(status)
+                    self.moved_accounts.append((result.phone, folder))
+                    if self.console:
+                        self.console.print(f"    [dim]-> moved to sessions_{folder}/[/dim]")
 
         return self.results
 
