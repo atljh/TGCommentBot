@@ -179,10 +179,12 @@ class Commenter:
         post_link: str,
         parsed: ParsedLink,
         semaphore: asyncio.Semaphore,
-        invite_hash: str = None
+        invite_hash: str = None,
+        progress = None
     ) -> CommentResult:
         phone = account["phone"]
         comment_text = random.choice(comments)
+        console = progress.console if progress else self.console
 
         async with semaphore:
             session_file = Path(account["session_file"]) if account.get("session_file") else None
@@ -217,8 +219,8 @@ class Commenter:
                         log_error("comment", phone, join_status)
                         return CommentResult(phone, False, join_status, comment_text)
                     log_info(f"JOIN | {phone} | channel={actual_channel_id}")
-                    if self.console:
-                        self.console.print(f"  [green]+ {phone}: JOIN | channel={actual_channel_id}[/green]")
+                    if console:
+                        console.print(f"  [green]+ {phone}: JOIN | channel={actual_channel_id}[/green]")
                     await self.db.update_subscription(account["id"], actual_channel_id, True)
 
                 await self.send_comment(client, actual_channel_id, message_id, comment_text)
@@ -241,40 +243,40 @@ class Commenter:
             except FloodWaitError as e:
                 error_msg = f"FLOOD:{e.seconds}s"
                 log_error("comment", phone, error_msg)
-                if self.console:
-                    self.console.print(f"  [yellow]! {phone}: {error_msg}[/yellow]")
+                if console:
+                    console.print(f"  [yellow]! {phone}: {error_msg}[/yellow]")
                 return CommentResult(phone, False, error_msg, comment_text)
 
             except SlowModeWaitError as e:
                 error_msg = f"SLOWMODE:{e.seconds}s"
                 log_error("comment", phone, error_msg)
-                if self.console:
-                    self.console.print(f"  [yellow]! {phone}: {error_msg}[/yellow]")
+                if console:
+                    console.print(f"  [yellow]! {phone}: {error_msg}[/yellow]")
                 return CommentResult(phone, False, error_msg, comment_text)
 
             except ChannelPrivateError:
                 await self.db.update_subscription(account["id"], actual_channel_id, False)
                 log_error("comment", phone, "CHANNEL_PRIVATE")
-                if self.console:
-                    self.console.print(f"  [yellow]! {phone}: CHANNEL_PRIVATE[/yellow]")
+                if console:
+                    console.print(f"  [yellow]! {phone}: CHANNEL_PRIVATE[/yellow]")
                 return CommentResult(phone, False, "CHANNEL_PRIVATE", comment_text)
 
             except UserBannedInChannelError:
                 log_error("comment", phone, "BANNED_IN_CHANNEL")
-                if self.console:
-                    self.console.print(f"  [yellow]! {phone}: BANNED_IN_CHANNEL[/yellow]")
+                if console:
+                    console.print(f"  [yellow]! {phone}: BANNED_IN_CHANNEL[/yellow]")
                 return CommentResult(phone, False, "BANNED_IN_CHANNEL", comment_text)
 
             except ChatWriteForbiddenError:
                 log_error("comment", phone, "CHAT_WRITE_FORBIDDEN")
-                if self.console:
-                    self.console.print(f"  [yellow]! {phone}: CHAT_WRITE_FORBIDDEN - comments disabled[/yellow]")
+                if console:
+                    console.print(f"  [yellow]! {phone}: CHAT_WRITE_FORBIDDEN - comments disabled[/yellow]")
                 return CommentResult(phone, False, "CHAT_WRITE_FORBIDDEN", comment_text)
 
             except (MsgIdInvalidError, MessageIdInvalidError):
                 log_error("comment", phone, "MSG_ID_INVALID")
-                if self.console:
-                    self.console.print(f"  [yellow]! {phone}: MSG_ID_INVALID[/yellow]")
+                if console:
+                    console.print(f"  [yellow]! {phone}: MSG_ID_INVALID[/yellow]")
                 return CommentResult(phone, False, "MSG_ID_INVALID", comment_text)
 
             except Exception as e:
@@ -283,8 +285,8 @@ class Commenter:
 
                 if "message" in error_lower and "invalid" in error_lower:
                     log_error("comment", phone, "MSG_ID_INVALID")
-                    if self.console:
-                        self.console.print(f"  [yellow]! {phone}: MSG_ID_INVALID[/yellow]")
+                    if console:
+                        console.print(f"  [yellow]! {phone}: MSG_ID_INVALID[/yellow]")
                     return CommentResult(phone, False, "MSG_ID_INVALID", comment_text)
 
                 log_error("comment", phone, error_msg)
@@ -293,11 +295,11 @@ class Commenter:
 
                 if is_ban:
                     await self.db.set_account_active(account["id"], False)
-                    if self.console:
-                        self.console.print(f"  [red]x {phone}: {error_msg[:40]}[/red]")
+                    if console:
+                        console.print(f"  [red]x {phone}: {error_msg[:40]}[/red]")
                 else:
-                    if self.console:
-                        self.console.print(f"  [yellow]! {phone}: {error_msg[:40]}[/yellow]")
+                    if console:
+                        console.print(f"  [yellow]! {phone}: {error_msg[:40]}[/yellow]")
 
                 return CommentResult(phone, False, error_msg[:50], comment_text, is_ban, session_file, json_file)
 
@@ -439,12 +441,14 @@ class Commenter:
             BarColumn(),
             TaskProgressColumn(),
             TextColumn("[cyan]{task.completed}/{task.total}"),
+            console=self.console,
         ) as progress:
             task = progress.add_task(f"Comments", total=len(valid_accounts))
 
             async def process_with_progress(account):
                 result = await self.process_account(
-                    account, channel_id, message_id, comments, post_link, parsed, semaphore, invite_hash
+                    account, channel_id, message_id, comments, post_link, parsed, semaphore, invite_hash,
+                    progress=progress
                 )
                 self.results.append(result)
                 progress.advance(task)
