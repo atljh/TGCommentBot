@@ -1,0 +1,16 @@
+# TG Comments Configuration
+
+# Telegram API credentials
+# Get yours at https://my.telegram.org/apps
+api_id: 2040
+api_hash: "b18441a1ff607e10a989891a5462e627"
+
+# Paths
+sessions_dir: "./sessions"
+database: "./database.db"
+proxies_file: "./proxies.txt"
+
+# Safety settings
+safety:
+  max_comments_per_day: 20    # Max comments per account per day
+  delay_range: [5, 15]        # Delay between comments (seconds)
