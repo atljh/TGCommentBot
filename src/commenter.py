@@ -327,6 +327,8 @@ class Commenter:
                 json_data = {}
 
             client = BaseThon(session_file=session_file, json_data=json_data)
+            should_move = False
+            move_status = None
 
             try:
                 async with semaphore:
@@ -340,15 +342,9 @@ class Commenter:
                         self.console.print(f"  [red]x {phone}: {check_result}[/red]")
 
                     if self.sessions_dir and get_status_folder(check_result):
-                        moved = move_account_to_status_folder(
-                            session_file, json_file, check_result,
-                            self.sessions_dir, None
-                        )
-                        if moved:
-                            folder = get_status_folder(check_result)
-                            self.moved_accounts.append((phone, folder))
-                            if self.console:
-                                self.console.print(f"    [dim]-> moved to sessions_{folder}/[/dim]")
+                        should_move = True
+                        move_status = check_result
+
                     return None
                 else:
                     if self.console:
@@ -362,7 +358,21 @@ class Commenter:
                 return None
 
             finally:
-                await client.disconnect()
+                try:
+                    await client.disconnect()
+                except Exception:
+                    pass
+
+                if should_move and move_status:
+                    moved = move_account_to_status_folder(
+                        session_file, json_file, move_status,
+                        self.sessions_dir, None
+                    )
+                    if moved:
+                        folder = get_status_folder(move_status)
+                        self.moved_accounts.append((phone, folder))
+                        if self.console:
+                            self.console.print(f"    [dim]-> moved to sessions_{folder}/[/dim]")
 
         results = await asyncio.gather(*(check_one(acc) for acc in accounts))
         return [acc for acc in results if acc is not None]
