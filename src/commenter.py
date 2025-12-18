@@ -180,10 +180,11 @@ class Commenter:
         parsed: ParsedLink,
         semaphore: asyncio.Semaphore,
         invite_hash: str = None,
-        progress = None
+        progress = None,
+        comment_index: int = 0
     ) -> CommentResult:
         phone = account["phone"]
-        comment_text = random.choice(comments)
+        comment_text = comments[comment_index % len(comments)]
         console = progress.console if progress else self.console
 
         async with semaphore:
@@ -428,8 +429,8 @@ class Commenter:
             self.console.print(f"\n[bold]Sending comments...[/bold]")
 
         if dry_run:
-            for acc in valid_accounts:
-                comment_text = random.choice(comments)
+            for i, acc in enumerate(valid_accounts):
+                comment_text = comments[i % len(comments)]
                 self.results.append(CommentResult(acc["phone"], True, "DRY_RUN", comment_text))
             return self.results
 
@@ -445,17 +446,18 @@ class Commenter:
         ) as progress:
             task = progress.add_task(f"Comments", total=len(valid_accounts))
 
-            async def process_with_progress(account):
+            async def process_with_progress(account, comment_idx):
                 result = await self.process_account(
                     account, channel_id, message_id, comments, post_link, parsed, semaphore, invite_hash,
-                    progress=progress
+                    progress=progress,
+                    comment_index=comment_idx
                 )
                 self.results.append(result)
                 progress.advance(task)
                 return result
 
             await asyncio.gather(
-                *[process_with_progress(acc) for acc in valid_accounts],
+                *[process_with_progress(acc, i) for i, acc in enumerate(valid_accounts)],
                 return_exceptions=True
             )
 
